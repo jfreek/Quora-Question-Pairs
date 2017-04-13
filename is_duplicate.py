@@ -1,6 +1,7 @@
 # -*- coding: UTF-8 -*-
 import pandas as pn
 import re
+import time
 from sklearn.cluster import KMeans
 from gensim.models import word2vec
 from nltk.tokenize import word_tokenize
@@ -27,10 +28,9 @@ def clean_text(tset, to_unicode=True):
     tset = re.sub(r"\s{2,}", " ", tset)
     return tset
 
-
+# read training data
 train_df = pn.read_csv('/home/jfreek/workspace/tmp/train.csv')
-import time
-
+# ********** clean text **********
 t1 = time.time()
 question_list = train_df["question1"].tolist() + train_df["question2"].tolist()
 question_list = list(set(question_list))
@@ -38,10 +38,9 @@ question_list = [clean_text(tset=question) for question in question_list if str(
 t2 = time.time()
 total = t2-t1
 print str(total)
-
+# ********** tokenize text **********
 tokenized_questions = [word_tokenize(question) for question in question_list]
-
-# w2v parameters
+# ********** w2v parameters **********
 parallel_workers = 7
 vector_dimensionality = 300
 min_word_count = 10
@@ -49,7 +48,7 @@ windows_size = 2
 downsampling = 1e-3
 skipgram = 1
 h_softmax = 1
-# train the model skipgram
+# ********** train the model **********
 t0 = time.time()
 model_skg = word2vec.Word2Vec(sentences=tokenized_questions, sg=skipgram, workers=parallel_workers,
                               size=vector_dimensionality, min_count=min_word_count,
@@ -59,7 +58,7 @@ t1 = time.time()
 total = t1 - t0
 
 print "********************MODEL trained: " + str(total) + "********************"
-
+# ********** save the model **********
 model_skg.init_sims(replace=True)
 # save the model for later use. You can load it later using Word2Vec.load()
 # Name Format: vectordimension_mincount_windowsize_downsampling_skipgram(CBoW)_hsampling
