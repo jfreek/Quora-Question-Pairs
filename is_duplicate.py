@@ -1,7 +1,7 @@
 # -*- coding: UTF-8 -*-
 import pandas as pn
 import re
-import time
+import pickle
 from sklearn.cluster import KMeans
 from gensim.models import word2vec
 from nltk.tokenize import word_tokenize
@@ -36,78 +36,66 @@ def clean_stop_words(stop_words_list, wordlist):
             new_wordlist.append(word)
     return new_wordlist
 
-# read training data
-train_df = pn.read_csv('/home/jfreek/workspace/tmp/train.csv')
-# ********** clean text **********
-t1 = time.time()
-question_list = train_df["question1"].tolist() + train_df["question2"].tolist()
-question_list = list(set(question_list))
-question_list = [clean_text(tset=question) for question in question_list if str(question) != "nan"]
-t2 = time.time()
-total = t2-t1
-print str(total)
-# ********** tokenize text **********
-tokenized_questions = [word_tokenize(question) for question in question_list]
-# ********** stop words **********
-stop_words = set(stopwords.words('english'))
-for i in xrange(len(tokenized_questions)):
-    tokenized_questions[i] = clean_stop_words(stop_words_list=stop_words, wordlist=tokenized_questions[i])
-# ********** w2v parameters **********
-parallel_workers = 7
-vector_dimensionality = 300
-min_word_count = 10
-windows_size = 2
-downsampling = 1e-3
-skipgram = 1
-h_softmax = 1
-# ********** train the model **********
-t0 = time.time()
-model_skg = word2vec.Word2Vec(sentences=tokenized_questions, sg=skipgram, workers=parallel_workers,
-                              size=vector_dimensionality, min_count=min_word_count,
-                              window=windows_size, sample=downsampling)
-del tokenized_questions
-t1 = time.time()
-total = t1 - t0
-print "********************MODEL trained: " + str(total) + "********************"
-# ********** save the model **********
-model_skg.init_sims(replace=True)
-# save the model for later use. You can load it later using Word2Vec.load()
-# Name Format: vectordimension_mincount_windowsize_downsampling_skipgram(CBoW)_hsampling
-model_path = "/home/jfreek/workspace/w2v_models/"
-model_skg.save(model_path + "quora_300_10_2_e-3_sg_hs")
-print "********************MODEL saved********************"
 
-# ********** Clusters! **********
-# Load the model
-cluster_size = 5
-w2v_model = word2vec.Word2Vec.load(model_path + "quora_300_10_2_e-3_sg_hs")
-# set the list of words in the vocab in vector format
-word_vectors = w2v_model.syn0
-# number of clusters
-num_clusters = len(w2v_model.vocab) / cluster_size
-# initalize a k-means object and use it to extract centroids
-kmeans_clustering = KMeans(n_clusters=num_clusters)
-print "********************cluster initialized********************"
-t0 = time.time()
-# assignment of cluster for each word
-idx = kmeans_clustering.fit_predict(word_vectors)
-t1 = time.time()
-total = t1 - t0
-print "********************cluster assignment: " + str(total) + "********************"
-t0 = time.time()
-# create a Word:Index dictionary
-word_centroid_map = dict(zip(w2v_model.index2word, idx))
-t1 = time.time()
-total = t1 - t0
-print "********************cluster created: " + str(total) + "********************"
+class FindDuplicates:
+    def __init__(self):
+        self.tmp_path = '/home/jfreek/workspace/tmp/'
+        self.model_path = "/home/jfreek/workspace/w2v_models/"
+        self.cluster_path = "/home/jfreek/workspace/w2v_clusters/"
 
-# Convert to DF
-clusters = pn.DataFrame.from_dict(data=word_centroid_map, orient='index')
-clusters.columns = ['cluster']
-clusters['words'] = clusters.index
-clusters.reset_index(inplace=True)
-del clusters['index']
+    def data_prep(self, sw=False, checkpoint=False):
+        # read training data
+        train_df = pn.read_csv(self.tmp_path+'train.csv')
+        # ********** clean text **********
+        question_list = train_df["question1"].tolist() + train_df["question2"].tolist()
+        question_list = list(set(question_list))
+        question_list = [clean_text(tset=question) for question in question_list if str(question) != "nan"]
+        # ********** tokenize text **********
+        tokenized_questions = [word_tokenize(question) for question in question_list]
+        # ********** stop words **********
+        if sw:
+            stop_words = set(stopwords.words('english'))
+            for i in xrange(len(tokenized_questions)):
+                tokenized_questions[i] = clean_stop_words(stop_words_list=stop_words, wordlist=tokenized_questions[i])
+        # ********** checkpoint **********
+        if checkpoint:
+            with open(self.tmp_path+'tokens.p', 'w') as f:
+                pickle.dump(tokenized_questions, f)
+        else:
+            return tokenized_questions
 
-# data frame file into clusters folder
-cluster_path = "/home/jfreek/workspace/w2v_clusters/"
-clusters.to_pickle(cluster_path + "quora_kmeans_5.p")
+    def w2v_model(self, tokens, parallel_workers=7, min_word_count=10, windows_size=2):
+        # ********** train the model **********
+        model_skg = word2vec.Word2Vec(sentences=tokens, sg=1, workers=parallel_workers,
+                                      size=300, min_count=min_word_count,
+                                      window=windows_size, sample=1e-3)
+        # ********** save the model **********
+        model_skg.init_sims(replace=True)
+        # Name Format: vectordimension_mincount_windowsize_downsampling_skipgram(CBoW)_hsampling
+        model_skg.save(self.model_path + "quora_300_10_2_e-3_sg")
+        print "********************MODEL saved********************"
+
+    def kmeans_clustering(self, cluster_size=5):
+        # ********** Clusters! **********
+        # Load the model
+        w2v_model = word2vec.Word2Vec.load(self.model_path + "quora_300_10_2_e-3_sg")
+        # set the list of words in the vocab in vector format
+        word_vectors = w2v_model.wv.syn0
+        # number of clusters
+        num_clusters = len(w2v_model.wv.vocab) / cluster_size
+        # initalize a k-means object and use it to extract centroids
+        kmeans_clustering = KMeans(n_clusters=num_clusters)
+        print "********************cluster initialized********************"
+        # assignment of cluster for each word
+        idx = kmeans_clustering.fit_predict(word_vectors)
+        print "********************cluster assignment********************"
+        # create a Word:Index dictionary
+        word_centroid_map = dict(zip(w2v_model.wv.index2word, idx))
+        print "********************cluster created********************"
+        # Convert to DF
+        clusters = pn.DataFrame.from_dict(data=word_centroid_map, orient='index')
+        clusters.columns = ['cluster']
+        clusters['words'] = clusters.index
+        clusters.reset_index(drop=True, inplace=True)
+        # data frame file into clusters folder
+        clusters.to_pickle(self.cluster_path + "quora_kmeans_5.p")
