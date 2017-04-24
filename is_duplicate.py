@@ -6,6 +6,7 @@ from sklearn.cluster import KMeans
 from gensim.models import word2vec
 from nltk.tokenize import word_tokenize
 from nltk.corpus import stopwords
+import spacy
 
 
 def replace_text(text, replace_list, replace_by):
@@ -21,8 +22,8 @@ def clean_text(tset, to_unicode=True):
     # undesirable chars out!
     to_del = re.findall(r"[#$'()|?]", tset, re.IGNORECASE)
     tset = replace_text(text=tset, replace_list=to_del, replace_by=" ")
-    to_dspace = re.findall(r"[^\w\s.,:;\-\\]", tset, re.IGNORECASE)
-    tset = replace_text(text=tset, replace_list=to_dspace, replace_by=" {0} ")
+    to_space = re.findall(r"[^\w\s.,:;\-\\]", tset, re.IGNORECASE)
+    tset = replace_text(text=tset, replace_list=to_space, replace_by=" {0} ")
     if to_unicode and type(tset) != unicode:
         tset = tset.decode('utf8', 'ignore')
     tset = re.sub(r"\s{2,}", " ", tset)
@@ -37,7 +38,7 @@ def clean_stop_words(stop_words_list, wordlist):
     return new_wordlist
 
 
-class FindDuplicates:
+class Word2vecFunctions:
     def __init__(self):
         self.tmp_path = '/home/jfreek/workspace/tmp/'
         self.model_path = "/home/jfreek/workspace/w2v_models/"
@@ -102,3 +103,19 @@ class FindDuplicates:
         clusters.reset_index(drop=True, inplace=True)
         # data frame file into clusters folder
         clusters.to_pickle(self.cluster_path + "quora_300_{params}_e-3_sg_kmeans_{k}".format(params=param, k=str(cluster_size)))
+
+
+class FindDulicates:
+    def __init__(self):
+        self.tmp_path = '/home/jfreek/workspace/tmp/'
+        self.cluster_path = "/home/jfreek/workspace/w2v_clusters/"
+
+    def word_tag(self):
+        """
+        Tag words with pos, lemma and w2v cluster
+        :return: df with all words and all its tags
+        """
+        pass
+
+    def decision_tree(self):
+        pass
