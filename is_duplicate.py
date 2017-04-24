@@ -51,34 +51,37 @@ class FindDuplicates:
         question_list = list(set(question_list))
         question_list = [clean_text(tset=question) for question in question_list if str(question) != "nan"]
         # ********** tokenize text **********
+        file_name = "tokens.p"
         tokenized_questions = [word_tokenize(question) for question in question_list]
         # ********** stop words **********
         if sw:
+            file_name = "sw_"+file_name
             stop_words = set(stopwords.words('english'))
             for i in xrange(len(tokenized_questions)):
                 tokenized_questions[i] = clean_stop_words(stop_words_list=stop_words, wordlist=tokenized_questions[i])
         # ********** checkpoint **********
         if checkpoint:
-            with open(self.tmp_path+'tokens.p', 'w') as f:
+            with open(self.tmp_path+file_name, 'w') as f:
                 pickle.dump(tokenized_questions, f)
         else:
             return tokenized_questions
 
-    def w2v_model(self, tokens, parallel_workers=7, min_word_count=10, windows_size=2):
+    def w2v_model(self, tokens, parallel_workers=7, min_word_count=10, windows_size=4):
         # ********** train the model **********
         model_skg = word2vec.Word2Vec(sentences=tokens, sg=1, workers=parallel_workers,
                                       size=300, min_count=min_word_count,
                                       window=windows_size, sample=1e-3)
         # ********** save the model **********
+        param = str(min_word_count)+"_"+str(windows_size)
         model_skg.init_sims(replace=True)
         # Name Format: vectordimension_mincount_windowsize_downsampling_skipgram(CBoW)_hsampling
-        model_skg.save(self.model_path + "quora_300_10_2_e-3_sg")
+        model_skg.save(self.model_path + "quora_300_{params}_e-3_sg".format(params=param))
         print "********************MODEL saved********************"
 
-    def kmeans_clustering(self, cluster_size=5):
+    def kmeans_clustering(self, param, cluster_size=5):
         # ********** Clusters! **********
         # Load the model
-        w2v_model = word2vec.Word2Vec.load(self.model_path + "quora_300_10_2_e-3_sg")
+        w2v_model = word2vec.Word2Vec.load(self.model_path + "quora_300_{params}_e-3_sg".format(params=param))
         # set the list of words in the vocab in vector format
         word_vectors = w2v_model.wv.syn0
         # number of clusters
@@ -98,4 +101,4 @@ class FindDuplicates:
         clusters['words'] = clusters.index
         clusters.reset_index(drop=True, inplace=True)
         # data frame file into clusters folder
-        clusters.to_pickle(self.cluster_path + "quora_kmeans_5.p")
+        clusters.to_pickle(self.cluster_path + "quora_300_{params}_e-3_sg_kmeans_{k}".format(params=param, k=str(cluster_size)))
