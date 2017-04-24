@@ -102,7 +102,8 @@ class Word2vecFunctions:
         clusters['words'] = clusters.index
         clusters.reset_index(drop=True, inplace=True)
         # data frame file into clusters folder
-        clusters.to_pickle(self.cluster_path + "quora_300_{params}_e-3_sg_kmeans_{k}".format(params=param, k=str(cluster_size)))
+        clusters.to_pickle(self.cluster_path + "quora_300_{params}_e-3_sg_kmeans_{k}".format(params=param,
+                                                                                             k=str(cluster_size)))
 
 
 class FindDuplicates:
@@ -112,7 +113,7 @@ class FindDuplicates:
 
     def word_tag(self):
         """
-        Tag words with pos, lemma and w2v cluster
+        Tag words with question_id, pos, lemma and w2v cluster
         :return: df with all words and all its tags
         """
         pass
