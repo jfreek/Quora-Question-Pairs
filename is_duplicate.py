@@ -105,7 +105,7 @@ class Word2vecFunctions:
         clusters.to_pickle(self.cluster_path + "quora_300_{params}_e-3_sg_kmeans_{k}".format(params=param, k=str(cluster_size)))
 
 
-class FindDulicates:
+class FindDuplicates:
     def __init__(self):
         self.tmp_path = '/home/jfreek/workspace/tmp/'
         self.cluster_path = "/home/jfreek/workspace/w2v_clusters/"
