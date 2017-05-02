@@ -1,5 +1,5 @@
 # -*- coding: UTF-8 -*-
-import pandas as pn
+import pandas as pd
 import re
 import pickle
 from sklearn.cluster import KMeans
@@ -46,7 +46,7 @@ class Word2vecFunctions:
 
     def data_prep(self, sw=False, checkpoint=False):
         # read training data
-        train_df = pn.read_csv(self.tmp_path+'train.csv')
+        train_df = pd.read_csv(self.tmp_path+'train.csv')
         # ********** clean text **********
         question_list = train_df["question1"].tolist() + train_df["question2"].tolist()
         question_list = list(set(question_list))
@@ -64,6 +64,7 @@ class Word2vecFunctions:
         if checkpoint:
             with open(self.tmp_path+file_name, 'w') as f:
                 pickle.dump(tokenized_questions, f)
+            return tokenized_questions
         else:
             return tokenized_questions
 
@@ -97,7 +98,7 @@ class Word2vecFunctions:
         word_centroid_map = dict(zip(w2v_model.wv.index2word, idx))
         print "********************cluster created********************"
         # Convert to DF
-        clusters = pn.DataFrame.from_dict(data=word_centroid_map, orient='index')
+        clusters = pd.DataFrame.from_dict(data=word_centroid_map, orient='index')
         clusters.columns = ['cluster']
         clusters['words'] = clusters.index
         clusters.reset_index(drop=True, inplace=True)
@@ -108,15 +109,33 @@ class Word2vecFunctions:
 
 class FindDuplicates:
     def __init__(self):
+        self.nlp = spacy.load('en')
         self.tmp_path = '/home/jfreek/workspace/tmp/'
-        self.cluster_path = "/home/jfreek/workspace/w2v_clusters/"
+        self.cluster_path = "/home/jfreek/workspace/w2v_clusters/quora_300_10_4_e-3_sg_kmeans_5"
+        self.clusters = pd.read_pickle(self.cluster_path)
 
-    def word_tag(self):
+    def word_tag(self, question):
         """
         Tag words with question_id, pos, lemma and w2v cluster
         :return: df with all words and all its tags
         """
-        pass
+        # check text type and converting to unicode
+        if type(question) != unicode:
+            question = question.decode('utf8')
+        # tag process
+        quest = self.nlp(question)
+        df = pd.DataFrame()
+        for word in quest:
+            try:
+                context = self.clusters[self.clusters['words'] == word.text]['cluster'].iloc[0]
+                context = str(context)
+            except:
+                context = None
+            temp = pd.DataFrame({'word': word.text, 'lemma': word.lemma_,
+                                 'pos': word.pos_, 'context': context}, index=[0])
+            df = df.append(temp)
+        df.reset_index(drop=True, inplace=True)
+        return df
 
     def decision_tree(self):
         pass
