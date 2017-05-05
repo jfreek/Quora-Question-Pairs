@@ -68,7 +68,7 @@ class Word2vecFunctions:
         else:
             return tokenized_questions
 
-    def w2v_model(self, tokens, parallel_workers=7, min_word_count=10, windows_size=4):
+    def w2v_model(self, tokens, parallel_workers=7, min_word_count=5, windows_size=2):
         # ********** train the model **********
         model_skg = word2vec.Word2Vec(sentences=tokens, sg=1, workers=parallel_workers,
                                       size=300, min_count=min_word_count,
@@ -80,7 +80,7 @@ class Word2vecFunctions:
         model_skg.save(self.model_path + "quora_300_{params}_e-3_sg".format(params=param))
         print "********************MODEL saved********************"
 
-    def kmeans_clustering(self, param, cluster_size=5):
+    def kmeans_clustering(self, param, cluster_size=10):
         # ********** Clusters! **********
         # Load the model
         w2v_model = word2vec.Word2Vec.load(self.model_path + "quora_300_{params}_e-3_sg".format(params=param))
@@ -111,7 +111,7 @@ class FindDuplicates:
     def __init__(self):
         self.nlp = spacy.load('en')
         self.tmp_path = '/home/jfreek/workspace/tmp/'
-        self.cluster_path = "/home/jfreek/workspace/w2v_clusters/quora_300_10_4_e-3_sg_kmeans_5"
+        self.cluster_path = "/home/jfreek/workspace/w2v_clusters/quora_300_5_2_e-3_sg_kmeans_10"
         self.clusters = pd.read_pickle(self.cluster_path)
 
     def word_tag(self, question):
@@ -119,6 +119,7 @@ class FindDuplicates:
         Tag words with question_id, pos, lemma and w2v cluster
         :return: df with all words and all its tags
         """
+        question = question.lower()
         # check text type and converting to unicode
         if type(question) != unicode:
             question = question.decode('utf8')
@@ -137,5 +138,8 @@ class FindDuplicates:
         df.reset_index(drop=True, inplace=True)
         return df
 
-    def decision_tree(self):
+    def similarity_percentage(self):
+        pass
+
+    def nn_filter(self):
         pass
