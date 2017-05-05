@@ -130,7 +130,7 @@ class FindDuplicates:
 
     def word_tag(self, question):
         """
-        Tag words with question_id, pos, lemma and w2v cluster
+        Tags words with question id, pos, lemma and w2v cluster
         :return: df with all words and all its tags
         """
         question = question.lower()
@@ -170,3 +170,15 @@ class FindDuplicates:
 
     def nn_filter(self):
         pass
+
+
+def main():
+    # Train and create word2vec model
+    wf = Word2vecFunctions()
+    tokens = wf.data_prep(checkpoint=True)
+    wf.w2v_model(tokens=tokens)
+    wf.kmeans_clustering(param='5_2', cluster_size=10)
+    # find duplicates training
+    fd = FindDuplicates()
+    train_df = pd.read_csv(fd.tmp_path+'train.csv')
+
