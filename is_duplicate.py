@@ -39,7 +39,17 @@ def clean_stop_words(stop_words_list, wordlist):
 
 
 def get_percentage(list1, list2):
-    return 1
+    t = len(list1) + len(list2)
+    count = 0
+    for item in list1:
+        if list2:
+            if item in list2:
+                count += 1
+                list2.remove(item)
+        else:
+            break
+    percent = float(2*count)/t
+    return percent
 
 
 class Word2vecFunctions:
@@ -147,13 +157,13 @@ class FindDuplicates:
         df = pd.DataFrame(columns=variables, index=[0])
         for var in variables:
             if var == 'pnoun':
-                df_list1 = df1[(df1['pos'] == 'NOUN') | (df1['pos'] == 'PRON')]['context'].tolist()
-                df_list2 = df2[(df2['pos'] == 'NOUN') | (df2['pos'] == 'PRON')]['context'].tolist()
+                df_list1 = df1[((df1['pos'] == 'NOUN') | (df1['pos'] == 'PRON')) & (df1['context'].notnull())]['context'].tolist()
+                df_list2 = df2[((df2['pos'] == 'NOUN') | (df2['pos'] == 'PRON')) & (df2['context'].notnull())]['context'].tolist()
                 p = get_percentage(list1=df_list1, list2=df_list2)
                 df[var] = p
             else:
-                df_list1 = df1[var].tolist()
-                df_list2 = df2[var].tolist()
+                df_list1 = df1[df1[var].notnull()][var].tolist()
+                df_list2 = df2[df2[var].notnull()][var].tolist()
                 p = get_percentage(list1=df_list1, list2=df_list2)
                 df[var] = p
         return df
