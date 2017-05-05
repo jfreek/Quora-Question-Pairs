@@ -153,18 +153,18 @@ class FindDuplicates:
         return df
 
     def similarity_percentage(self, df1, df2):
-        variables = ['context', 'pos', 'lemma', 'pnoun']
+        variables = ['context', 'pos', 'lemma', 'subject']
         df = pd.DataFrame(columns=variables, index=[0])
         for var in variables:
-            if var == 'pnoun':
+            if var == 'subject':
                 df_list1 = df1[((df1['pos'] == 'NOUN') | (df1['pos'] == 'PRON')) & (df1['context'].notnull())]['context'].tolist()
                 df_list2 = df2[((df2['pos'] == 'NOUN') | (df2['pos'] == 'PRON')) & (df2['context'].notnull())]['context'].tolist()
-                p = get_percentage(list1=df_list1, list2=df_list2)
+                p = get_percentage(list1=df_list1, list2=df_list2) if df_list1 and df_list2 else 0
                 df[var] = p
             else:
                 df_list1 = df1[df1[var].notnull()][var].tolist()
                 df_list2 = df2[df2[var].notnull()][var].tolist()
-                p = get_percentage(list1=df_list1, list2=df_list2)
+                p = get_percentage(list1=df_list1, list2=df_list2) if df_list1 and df_list2 else 0
                 df[var] = p
         return df
 
@@ -173,12 +173,31 @@ class FindDuplicates:
 
 
 def main():
-    # Train and create word2vec model
+    # ********** Train and create word2vec model **********
     wf = Word2vecFunctions()
     tokens = wf.data_prep(checkpoint=True)
     wf.w2v_model(tokens=tokens)
     wf.kmeans_clustering(param='5_2', cluster_size=10)
-    # find duplicates training
+    # ********** DEV find duplicates **********
     fd = FindDuplicates()
     train_df = pd.read_csv(fd.tmp_path+'train.csv')
-
+    # dev pipeline
+    df = pd.DataFrame(index=[0])
+    for row in train_df[['id', 'question1', 'question2', 'is_duplicate']].values:
+        df_1 = fd.word_tag(row[1])
+        df_2 = fd.word_tag(row[2])
+        temp = fd.similarity_percentage(df1=df_1, df2=df_2)
+        temp['id'] = row[0]
+        temp['is_duplicate'] = row[3]
+        df = df.append(temp)
+    df.reset_index(drop=True, inplace=True)
+    # ********** Find Duplicates pipeline **********
+    df = pd.DataFrame(index=[0])
+    for row in train_df[['id', 'question1', 'question2', 'is_duplicate']].values:
+        df_1 = fd.word_tag(row[1])
+        df_2 = fd.word_tag(row[2])
+        temp = fd.similarity_percentage(df1=df_1, df2=df_2)
+        # filter part HERE
+        df = df.append(temp)
+        df['id'] = row[0]
+    df.reset_index(drop=True, inplace=True)
