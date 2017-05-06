@@ -290,13 +290,13 @@ def main():
         temp['is_duplicate'] = row[3]
         df = df.append(temp)
     df.reset_index(drop=True, inplace=True)
-    # Find relevance
-    relevance = get_relevance(df=df, columns=['context', 'pos', 'lemma', 'subject'])
     t1 = time.time()
-    total = t1 -t0
+    total = t1 - t0
     print "total time: " + str(total)
     # ============================================================
 
+    # Find relevance
+    relevance = get_relevance(df=df, columns=['context', 'pos', 'lemma', 'subject'])
     # check differences. How much does it change the ave mean of each variable.
     print 'context: ', relevance['context_1'] - relevance['context_0']
     print 'lemma: ', relevance['lemma_1'] - relevance['lemma_0']
