@@ -7,6 +7,8 @@ from gensim.models import word2vec
 from nltk.tokenize import word_tokenize
 from nltk.corpus import stopwords
 import spacy
+import time
+from joblib import Parallel, delayed
 
 
 def replace_text(text, replace_list, replace_by):
@@ -50,6 +52,24 @@ def get_percentage(list1, list2):
             break
     percent = float(2*count)/t
     return percent
+
+
+def get_relevance(df, columns):
+    d = {}
+    for column in columns:
+        d[column+'_0'] = df[df['is_duplicate'] == 0][column].mean()
+        d[column + '_1'] = df[df['is_duplicate'] == 1][column].mean()
+    return d
+
+
+def dev_pipeline(row):
+    fd = FindDuplicates()
+    df_1 = fd.word_tag(row[1])
+    df_2 = fd.word_tag(row[2])
+    temp = fd.similarity_percentage(df1=df_1, df2=df_2)
+    temp['id'] = row[0]
+    temp['is_duplicate'] = row[3]
+    return temp
 
 
 class Word2vecFunctions:
@@ -181,8 +201,13 @@ def main():
     # ********** DEV find duplicates **********
     fd = FindDuplicates()
     train_df = pd.read_csv(fd.tmp_path+'train.csv')
+    train_df = train_df[:7000]
+
     # dev pipeline
-    df = pd.DataFrame(index=[0])
+    # df = Parallel(n_jobs=7)(delayed(dev_pipeline)(row) for row in train_df[['id', 'question1', 'question2', 'is_duplicate']].values)
+    t0 = time.time()
+
+    df = pd.DataFrame()
     for row in train_df[['id', 'question1', 'question2', 'is_duplicate']].values:
         df_1 = fd.word_tag(row[1])
         df_2 = fd.word_tag(row[2])
@@ -191,13 +216,24 @@ def main():
         temp['is_duplicate'] = row[3]
         df = df.append(temp)
     df.reset_index(drop=True, inplace=True)
+    # Find relevance
+    relevance = get_relevance(df=df, columns=['context', 'pos', 'lemma', 'subject'])
+
+    t1 = time.time()
+    total = t1 -t0
+    print "total time: " + str(total)
+    print 'context: ', relevance['context_1'] - relevance['context_0']
+    print 'lemma: ', relevance['lemma_1'] - relevance['lemma_0']
+    print 'pos: ', relevance['pos_1'] - relevance['pos_0']
+    print 'subject: ', relevance['subject_1'] - relevance['subject_0']
+
     # ********** Find Duplicates pipeline **********
-    df = pd.DataFrame(index=[0])
+    df = pd.DataFrame()
     for row in train_df[['id', 'question1', 'question2', 'is_duplicate']].values:
         df_1 = fd.word_tag(row[1])
         df_2 = fd.word_tag(row[2])
         temp = fd.similarity_percentage(df1=df_1, df2=df_2)
         # filter part HERE
+        temp['id'] = row[0]
         df = df.append(temp)
-        df['id'] = row[0]
     df.reset_index(drop=True, inplace=True)
