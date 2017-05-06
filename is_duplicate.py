@@ -12,6 +12,13 @@ from joblib import Parallel, delayed
 
 
 def replace_text(text, replace_list, replace_by):
+    """
+    Replaces items in replace_list by items in replace_by, from a text.
+    :param text: str
+    :param replace_list: list 
+    :param replace_by: str
+    :return: new text: str
+    """
     if replace_list:
         replace_list = list(set(replace_list))
         for i in xrange(len(replace_list)):
@@ -20,6 +27,12 @@ def replace_text(text, replace_list, replace_by):
 
 
 def clean_text(tset, to_unicode=True):
+    """
+    Replaces undesirable characters and transform to unicode if needed. 
+    :param tset: str
+    :param to_unicode:bool 
+    :return: clean text: str
+    """
     tset = tset.lower()
     # undesirable chars out!
     to_del = re.findall(r"[#$'()|?]", tset, re.IGNORECASE)
@@ -33,6 +46,12 @@ def clean_text(tset, to_unicode=True):
 
 
 def clean_stop_words(stop_words_list, wordlist):
+    """
+    Function to assist in the exclusion of stop words.
+    :param stop_words_list: words to del:list
+    :param wordlist: words to filter:list
+    :return: new word list: list
+    """
     new_wordlist = []
     for word in wordlist:
         if word not in stop_words_list:
@@ -41,6 +60,12 @@ def clean_stop_words(stop_words_list, wordlist):
 
 
 def get_percentage(list1, list2):
+    """
+    Calculates the similarity of two lists (sequence matcher style)
+    :param list1: list
+    :param list2: list
+    :return: percentage: float
+    """
     t = len(list1) + len(list2)
     count = 0
     for item in list1:
@@ -55,6 +80,13 @@ def get_percentage(list1, list2):
 
 
 def get_relevance(df, columns):
+    """
+    Calculates the mean value of a variable when is equals to 1 and 0. 
+    It helps to check how much a variable changes in each case, giving a sense of relevance.
+    :param df: data frame
+    :param columns: list of columns0
+    :return: fields and its ave mean: dict
+    """
     d = {}
     for column in columns:
         d[column+'_0'] = df[df['is_duplicate'] == 0][column].mean()
@@ -63,6 +95,12 @@ def get_relevance(df, columns):
 
 
 def dev_pipeline(row):
+    """
+    Steps for development of model.
+    tags words and finds similarities for further check. 
+    :param row: data frame row: pandas series
+    :return: data frame
+    """
     fd = FindDuplicates()
     df_1 = fd.word_tag(row[1])
     df_2 = fd.word_tag(row[2])
@@ -73,12 +111,21 @@ def dev_pipeline(row):
 
 
 class Word2vecFunctions:
+    """
+    All functions to prepare data and train a word2vec model.
+    """
     def __init__(self):
         self.tmp_path = '/home/jfreek/workspace/tmp/'
         self.model_path = "/home/jfreek/workspace/w2v_models/"
         self.cluster_path = "/home/jfreek/workspace/w2v_clusters/"
 
     def data_prep(self, sw=False, checkpoint=False):
+        """
+        Prepares, cleans and gives format to the data for word2vec training input.
+        :param sw: true if we want to del stop words: bool
+        :param checkpoint: true if we want to save the tokens as a checkpoint: bool
+        :return: word tokens: list
+        """
         # read training data
         train_df = pd.read_csv(self.tmp_path+'train.csv')
         # ********** clean text **********
@@ -103,6 +150,14 @@ class Word2vecFunctions:
             return tokenized_questions
 
     def w2v_model(self, tokens, parallel_workers=7, min_word_count=5, windows_size=2):
+        """
+        Trains a word2vec model and saves it for future use.
+        :param tokens: word tokens: list
+        :param parallel_workers: number of processors to use: int 
+        :param min_word_count: minimum number of occurrences of a word to be included in vocab: int
+        :param windows_size: number of context words before and after the central word: int 
+        :return: saves word2vec model
+        """
         # ********** train the model **********
         model_skg = word2vec.Word2Vec(sentences=tokens, sg=1, workers=parallel_workers,
                                       size=300, min_count=min_word_count,
@@ -115,6 +170,12 @@ class Word2vecFunctions:
         print "********************MODEL saved********************"
 
     def kmeans_clustering(self, param, cluster_size=10):
+        """
+        Creates clusters of words using word2vec vectors and k-means algorithm.
+        :param param: parameters used in word2vec model as an identifier in clusters names: str
+        :param cluster_size: number of words in each cluster: int
+        :return: saves clusters data frame as pickle
+        """
         # ********** Clusters! **********
         # Load the model
         w2v_model = word2vec.Word2Vec.load(self.model_path + "quora_300_{params}_e-3_sg".format(params=param))
@@ -142,6 +203,9 @@ class Word2vecFunctions:
 
 
 class FindDuplicates:
+    """
+    Class with functions to identify duplicate question like nobody else!
+    """
     def __init__(self):
         self.nlp = spacy.load('en')
         self.tmp_path = '/home/jfreek/workspace/tmp/'
@@ -151,7 +215,8 @@ class FindDuplicates:
     def word_tag(self, question):
         """
         Tags words with question id, pos, lemma and w2v cluster
-        :return: df with all words and all its tags
+        :param question: question to tag: str
+        :return: df with all words and all its tags: data frame
         """
         question = question.lower()
         # check text type and converting to unicode
@@ -173,6 +238,12 @@ class FindDuplicates:
         return df
 
     def similarity_percentage(self, df1, df2):
+        """
+        Calculates similarity of two questions by comparing the tags.
+        :param df1: data frame of question 1 and tags
+        :param df2: data frame of question 2 and tags
+        :return: data frame with percentages: data frame
+        """
         variables = ['context', 'pos', 'lemma', 'subject']
         df = pd.DataFrame(columns=variables, index=[0])
         for var in variables:
@@ -193,20 +264,23 @@ class FindDuplicates:
 
 
 def main():
-    # ********** Train and create word2vec model **********
+    # **********To train and create word2vec model **********
     wf = Word2vecFunctions()
     tokens = wf.data_prep(checkpoint=True)
     wf.w2v_model(tokens=tokens)
     wf.kmeans_clustering(param='5_2', cluster_size=10)
+
     # ********** DEV find duplicates **********
     fd = FindDuplicates()
     train_df = pd.read_csv(fd.tmp_path+'train.csv')
-    train_df = train_df[:7000]
+    train_df = train_df[:10000]
 
-    # dev pipeline
+    # dev pipeline Parallel ======================================
     # df = Parallel(n_jobs=7)(delayed(dev_pipeline)(row) for row in train_df[['id', 'question1', 'question2', 'is_duplicate']].values)
-    t0 = time.time()
+    # ============================================================
 
+    # dev pipeline Cavernicola style =============================
+    t0 = time.time()
     df = pd.DataFrame()
     for row in train_df[['id', 'question1', 'question2', 'is_duplicate']].values:
         df_1 = fd.word_tag(row[1])
@@ -218,10 +292,12 @@ def main():
     df.reset_index(drop=True, inplace=True)
     # Find relevance
     relevance = get_relevance(df=df, columns=['context', 'pos', 'lemma', 'subject'])
-
     t1 = time.time()
     total = t1 -t0
     print "total time: " + str(total)
+    # ============================================================
+
+    # check differences. How much does it change the ave mean of each variable.
     print 'context: ', relevance['context_1'] - relevance['context_0']
     print 'lemma: ', relevance['lemma_1'] - relevance['lemma_0']
     print 'pos: ', relevance['pos_1'] - relevance['pos_0']
