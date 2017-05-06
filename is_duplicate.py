@@ -112,7 +112,7 @@ def dev_pipeline(row):
 
 class Word2vecFunctions:
     """
-    All functions to prepare data and train a word2vec model.
+    All functions to prepare data, train a word2vec model and classify words in clusters.
     """
     def __init__(self):
         self.tmp_path = '/home/jfreek/workspace/tmp/'
