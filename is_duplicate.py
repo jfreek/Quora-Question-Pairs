@@ -105,8 +105,10 @@ def dev_pipeline(row):
     :return: data frame
     """
     fd = FindDuplicates()
-    df_1 = fd.word_tag(row[1])
-    df_2 = fd.word_tag(row[2])
+    dl_1 = fd.word_tag(row[1])
+    dl_2 = fd.word_tag(row[2])
+    df_1 = pd.DataFrame(dl_1)
+    df_2 = pd.DataFrame(dl_2)
     temp = fd.similarity_percentage(df1=df_1, df2=df_2)
     temp['id'] = row[0]
     temp['is_duplicate'] = row[3]
@@ -196,13 +198,13 @@ class Word2vecFunctions:
         word_centroid_map = dict(zip(w2v_model.wv.index2word, idx))
         print "********************cluster created********************"
         # Convert to DF
-        clusters = pd.DataFrame.from_dict(data=word_centroid_map, orient='index')
-        clusters.columns = ['cluster']
-        clusters['words'] = clusters.index
-        clusters.reset_index(drop=True, inplace=True)
-        # data frame file into clusters folder
-        clusters.to_pickle(self.cluster_path + "quora_300_{params}_e-3_sg_kmeans_{k}".format(params=param,
-                                                                                             k=str(cluster_size)))
+        # clusters = pd.DataFrame.from_dict(data=word_centroid_map, orient='index')
+        # clusters.columns = ['cluster']
+        # clusters['words'] = clusters.index
+        # clusters.reset_index(drop=True, inplace=True)
+        # # data frame file into clusters folder
+        # clusters.to_pickle(self.cluster_path + "quora_300_{params}_e-3_sg_kmeans_{k}".format(params=param,
+        #                                                                                      k=str(cluster_size)))
 
 
 class FindDuplicates:
@@ -212,14 +214,14 @@ class FindDuplicates:
     def __init__(self):
         self.nlp = spacy.load('en')
         self.tmp_path = '/home/jfreek/workspace/tmp/'
-        self.cluster_path = "/home/jfreek/workspace/w2v_clusters/quora_300_5_2_e-3_sg_kmeans_10"
-        self.clusters = pd.read_pickle(self.cluster_path)
+        self.cluster_path = "/home/jfreek/workspace/w2v_clusters/quora_300_5_2_e-3_sg_kmeans_10_dict.p"
+        self.clusters = pickle.load(open(self.cluster_path, "rb"))
 
     def word_tag(self, question):
         """
         Tags words with question id, pos, lemma and w2v cluster
         :param question: question to tag: str
-        :return: df with all words and all its tags: data frame
+        :return: A list of dictionaries with all words and all its tags: list
         """
         question = question.lower()
         # check text type and converting to unicode
@@ -227,18 +229,17 @@ class FindDuplicates:
             question = question.decode('utf8')
         # tag process
         quest = self.nlp(question)
-        df = pd.DataFrame()
+        # df = pd.DataFrame()
+        tags_list = []
         for word in quest:
             try:
-                context = self.clusters[self.clusters['words'] == word.text]['cluster'].iloc[0]
+                context = self.clusters[word.text]
                 context = str(context)
             except:
                 context = None
-            temp = pd.DataFrame({'word': word.text, 'lemma': word.lemma_,
-                                 'pos': word.pos_, 'context': context}, index=[0])
-            df = df.append(temp)
-        df.reset_index(drop=True, inplace=True)
-        return df
+            temp = {'word': word.text, 'lemma': word.lemma_, 'pos': word.pos_, 'context': context}
+            tags_list.append(temp)
+        return tags_list
 
     def similarity_percentage(self, df1, df2):
         """
@@ -292,34 +293,35 @@ def main():
     fd = FindDuplicates()
     train_df = pd.read_csv(fd.tmp_path+'train.csv')
     train_df.dropna(inplace=True)
-    # train_df = train_df[:1000]
+    train_df = train_df[:10000]
 
     # dev pipeline Parallel style ======================================
-    t0 = time.time()
-    temp = Parallel(n_jobs=7)(delayed(dev_pipeline)(row)
-                            for row in train_df[['id', 'question1', 'question2', 'is_duplicate']].values)
-    t1 = time.time()
-    total = t1 - t0
-    print "total time: " + str(total)
-    df = pd.DataFrame()
-    for each in temp:
-        df = df.append(each)
-    df.reset_index(drop=True, inplace=True)
-    # ============================================================
-    # dev pipeline Cavernicola style =============================
     # t0 = time.time()
-    # df = pd.DataFrame()
-    # for row in train_df[['id', 'question1', 'question2', 'is_duplicate']].values:
-    #     df_1 = fd.word_tag(row[1])
-    #     df_2 = fd.word_tag(row[2])
-    #     temp = fd.similarity_percentage(df1=df_1, df2=df_2)
-    #     temp['id'] = row[0]
-    #     temp['is_duplicate'] = row[3]
-    #     df = df.append(temp)
-    # df.reset_index(drop=True, inplace=True)
+    # temp = Parallel(n_jobs=7)(delayed(dev_pipeline)(row)
+    #                         for row in train_df[['id', 'question1', 'question2', 'is_duplicate']].values)
     # t1 = time.time()
     # total = t1 - t0
     # print "total time: " + str(total)
+    # df = pd.concat(temp)
+    # df.reset_index(drop=True, inplace=True)
+    # ============================================================
+
+    # dev pipeline Cavernicola style =============================
+    t0 = time.time()
+    df = pd.DataFrame()
+    for row in train_df[['id', 'question1', 'question2', 'is_duplicate']].values:
+        dl_1 = fd.word_tag(row[1])
+        dl_2 = fd.word_tag(row[2])
+        df_1 = pd.DataFrame(dl_1)
+        df_2 = pd.DataFrame(dl_2)
+        temp = fd.similarity_percentage(df1=df_1, df2=df_2)
+        temp['id'] = row[0]
+        temp['is_duplicate'] = row[3]
+        df = df.append(temp)
+    df.reset_index(drop=True, inplace=True)
+    t1 = time.time()
+    total = t1 - t0
+    print "total time: " + str(total)
     # ============================================================
     # Logistic Regression
     X = df[['lemma', 'noun']].values
