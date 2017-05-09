@@ -294,8 +294,12 @@ def main():
     train_df = train_df[:1000]
 
     # dev pipeline Parallel style ======================================
+    t0 = time.time()
     temp = Parallel(n_jobs=7)(delayed(dev_pipeline)(row)
                             for row in train_df[['id', 'question1', 'question2', 'is_duplicate']].values)
+    t1 = time.time()
+    total = t1 - t0
+    print "total time: " + str(total)
     df = pd.DataFrame()
     for each in temp:
         df = df.append(each)
