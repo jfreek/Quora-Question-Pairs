@@ -1,13 +1,16 @@
 # -*- coding: UTF-8 -*-
-import pandas as pd
+import time
 import re
 import pickle
 from sklearn.cluster import KMeans
+from sklearn.linear_model import LogisticRegression
+from sklearn.cross_validation import train_test_split
+from sklearn.metrics import confusion_matrix, classification_report
 from gensim.models import word2vec
 from nltk.tokenize import word_tokenize
 from nltk.corpus import stopwords
+import pandas as pd
 import spacy
-import time
 from joblib import Parallel, delayed
 
 
@@ -204,7 +207,7 @@ class Word2vecFunctions:
 
 class FindDuplicates:
     """
-    Class with functions to identify duplicate question like nobody else!
+    Class with functions to identify duplicate questions like nobody else!
     """
     def __init__(self):
         self.nlp = spacy.load('en')
@@ -244,14 +247,29 @@ class FindDuplicates:
         :param df2: data frame of question 2 and tags
         :return: data frame with percentages: data frame
         """
-        variables = ['context', 'pos', 'lemma', 'subject']
+        variables = ['context', 'lemma', 'noun']
         df = pd.DataFrame(columns=variables, index=[0])
         for var in variables:
-            if var == 'subject':
-                df_list1 = df1[((df1['pos'] == 'NOUN') | (df1['pos'] == 'PRON')) & (df1['context'].notnull())]['context'].tolist()
-                df_list2 = df2[((df2['pos'] == 'NOUN') | (df2['pos'] == 'PRON')) & (df2['context'].notnull())]['context'].tolist()
+            if var == 'noun':
+                df_list1 = df1[(df1['pos'] == 'NOUN') & (df1['context'].notnull())]['context'].tolist()
+                df_list2 = df2[(df2['pos'] == 'NOUN') & (df2['context'].notnull())]['context'].tolist()
                 p = get_percentage(list1=df_list1, list2=df_list2) if df_list1 and df_list2 else 0
                 df[var] = p
+            # elif var == 'pron':
+            #     df_list1 = df1[(df1['pos'] == 'PRON') & (df1['context'].notnull())]['context'].tolist()
+            #     df_list2 = df2[(df2['pos'] == 'PRON') & (df2['context'].notnull())]['context'].tolist()
+            #     p = get_percentage(list1=df_list1, list2=df_list2) if df_list1 and df_list2 else 0
+            #     df[var] = p
+            # elif var == 'verb':
+            #     df_list1 = df1[(df1['pos'] == 'VERB') & (df1['context'].notnull())]['context'].tolist()
+            #     df_list2 = df2[(df2['pos'] == 'VERB') & (df2['context'].notnull())]['context'].tolist()
+            #     p = get_percentage(list1=df_list1, list2=df_list2) if df_list1 and df_list2 else 0
+            #     df[var] = p
+            # elif var == 'adj':
+            #     df_list1 = df1[(df1['pos'] == 'ADJ') & (df1['context'].notnull())]['context'].tolist()
+            #     df_list2 = df2[(df2['pos'] == 'ADJ') & (df2['context'].notnull())]['context'].tolist()
+            #     p = get_percentage(list1=df_list1, list2=df_list2) if df_list1 and df_list2 else 0
+            #     df[var] = p
             else:
                 df_list1 = df1[df1[var].notnull()][var].tolist()
                 df_list2 = df2[df2[var].notnull()][var].tolist()
@@ -273,35 +291,48 @@ def main():
     # ********** DEV find duplicates **********
     fd = FindDuplicates()
     train_df = pd.read_csv(fd.tmp_path+'train.csv')
-    train_df = train_df[:10000]
+    # train_df = train_df[:5000]
 
-    # dev pipeline Parallel ======================================
-    # df = Parallel(n_jobs=7)(delayed(dev_pipeline)(row) for row in train_df[['id', 'question1', 'question2', 'is_duplicate']].values)
-    # ============================================================
-
-    # dev pipeline Cavernicola style =============================
-    t0 = time.time()
+    # dev pipeline Parallel style ======================================
+    temp = Parallel(n_jobs=7)(delayed(dev_pipeline)(row)
+                            for row in train_df[['id', 'question1', 'question2', 'is_duplicate']].values)
     df = pd.DataFrame()
-    for row in train_df[['id', 'question1', 'question2', 'is_duplicate']].values:
-        df_1 = fd.word_tag(row[1])
-        df_2 = fd.word_tag(row[2])
-        temp = fd.similarity_percentage(df1=df_1, df2=df_2)
-        temp['id'] = row[0]
-        temp['is_duplicate'] = row[3]
-        df = df.append(temp)
+    for each in temp:
+        df = df.append(each)
     df.reset_index(drop=True, inplace=True)
-    t1 = time.time()
-    total = t1 - t0
-    print "total time: " + str(total)
     # ============================================================
-
-    # Find relevance
-    relevance = get_relevance(df=df, columns=['context', 'pos', 'lemma', 'subject'])
-    # check differences. How much does it change the ave mean of each variable.
-    print 'context: ', relevance['context_1'] - relevance['context_0']
-    print 'lemma: ', relevance['lemma_1'] - relevance['lemma_0']
-    print 'pos: ', relevance['pos_1'] - relevance['pos_0']
-    print 'subject: ', relevance['subject_1'] - relevance['subject_0']
+    # dev pipeline Cavernicola style =============================
+    # t0 = time.time()
+    # df = pd.DataFrame()
+    # for row in train_df[['id', 'question1', 'question2', 'is_duplicate']].values:
+    #     df_1 = fd.word_tag(row[1])
+    #     df_2 = fd.word_tag(row[2])
+    #     temp = fd.similarity_percentage(df1=df_1, df2=df_2)
+    #     temp['id'] = row[0]
+    #     temp['is_duplicate'] = row[3]
+    #     df = df.append(temp)
+    # df.reset_index(drop=True, inplace=True)
+    # t1 = time.time()
+    # total = t1 - t0
+    # print "total time: " + str(total)
+    # ============================================================
+    # Logistic Regression
+    X = df[['lemma', 'noun']].values
+    y = df['is_duplicate'].values
+    X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=.3, random_state=6)
+    logreg = LogisticRegression()
+    logreg.fit(X_train, y_train)
+    result = logreg.score(X_test, y_test)
+    print result
+    y_pred = logreg.predict(X_test)
+    confusion_m = confusion_matrix(y_test, y_pred)
+    print confusion_m
+    print(classification_report(y_test, y_pred))
+    # to save model
+    filename = '/home/jfreek/workspace/models/lr_model_test.sav'
+    pickle.dump(logreg, open(filename, 'wb'))
+    # to load
+    lr_model = pickle.load(open(filename, 'rb'))
 
     # ********** Find Duplicates pipeline **********
     df = pd.DataFrame()
