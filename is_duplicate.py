@@ -291,7 +291,8 @@ def main():
     # ********** DEV find duplicates **********
     fd = FindDuplicates()
     train_df = pd.read_csv(fd.tmp_path+'train.csv')
-    train_df = train_df[:1000]
+    train_df.dropna(inplace=True)
+    # train_df = train_df[:1000]
 
     # dev pipeline Parallel style ======================================
     t0 = time.time()
