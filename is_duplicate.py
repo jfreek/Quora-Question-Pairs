@@ -121,7 +121,7 @@ class Word2vecFunctions:
     """
     def __init__(self):
         self.tmp_path = '/home/jfreek/workspace/tmp/'
-        self.model_path = "/home/jfreek/workspace/w2v_models/"
+        self.model_path = "/home/jfreek/workspace/models/"
         self.cluster_path = "/home/jfreek/workspace/w2v_clusters/"
 
     def data_prep(self, sw=False, checkpoint=False):
@@ -197,14 +197,7 @@ class Word2vecFunctions:
         # create a Word:Index dictionary
         word_centroid_map = dict(zip(w2v_model.wv.index2word, idx))
         print "********************cluster created********************"
-        # Convert to DF
-        # clusters = pd.DataFrame.from_dict(data=word_centroid_map, orient='index')
-        # clusters.columns = ['cluster']
-        # clusters['words'] = clusters.index
-        # clusters.reset_index(drop=True, inplace=True)
-        # # data frame file into clusters folder
-        # clusters.to_pickle(self.cluster_path + "quora_300_{params}_e-3_sg_kmeans_{k}".format(params=param,
-        #                                                                                      k=str(cluster_size)))
+        pickle.dump(word_centroid_map, open(self.cluster_path + "quora_300_{params}_e-3_sg_kmeans_{k}_dict.p".format(params=param, k=str(cluster_size)), "wb"))
 
 
 class FindDuplicates:
