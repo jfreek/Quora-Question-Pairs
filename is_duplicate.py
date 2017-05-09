@@ -291,7 +291,7 @@ def main():
     # ********** DEV find duplicates **********
     fd = FindDuplicates()
     train_df = pd.read_csv(fd.tmp_path+'train.csv')
-    # train_df = train_df[:5000]
+    train_df = train_df[:1000]
 
     # dev pipeline Parallel style ======================================
     temp = Parallel(n_jobs=7)(delayed(dev_pipeline)(row)
@@ -322,8 +322,10 @@ def main():
     X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=.3, random_state=6)
     logreg = LogisticRegression()
     logreg.fit(X_train, y_train)
+    # get average accuracy
     result = logreg.score(X_test, y_test)
     print result
+    # predict 0 or 1
     y_pred = logreg.predict(X_test)
     confusion_m = confusion_matrix(y_test, y_pred)
     print confusion_m
@@ -333,6 +335,14 @@ def main():
     pickle.dump(logreg, open(filename, 'wb'))
     # to load
     lr_model = pickle.load(open(filename, 'rb'))
+    # get probabilities
+    probs = logreg.predict_proba(X_test)
+    prob_df = pd.DataFrame()
+    for prob in probs:
+        temp = pd.DataFrame({'is_duplicate': prob[1]}, index=[0])
+        prob_df = prob_df.append(temp)
+    prob_df.reset_index(drop=True, inplace=True)
+    prob_df['id'] = df['id']
 
     # ********** Find Duplicates pipeline **********
     df = pd.DataFrame()
