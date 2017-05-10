@@ -351,23 +351,23 @@ def main():
     fd = FindDuplicates()
     filename = 'lr_model_test.sav'
     test_df = pd.read_csv(fd.tmp_path+'test.csv')
-    test_df.dropna(inplace=True)
-    test_df = test_df[:10000]
+    # test_df.dropna(inplace=True)
+    # test_df = test_df[:10000]
 
     t0 = time.time()
     # CAVERNICOLA:
-    df = pd.DataFrame()
-    for row in test_df[['question1', 'question2']].values:
-        dl_1 = fd.word_tag(row[0])
-        dl_2 = fd.word_tag(row[1])
-        df_1 = pd.DataFrame(dl_1)
-        df_2 = pd.DataFrame(dl_2)
-        temp = fd.similarity_percentage(df1=df_1, df2=df_2)
-        df = df.append(temp)
-    df.reset_index(drop=True, inplace=True)
+    # df = pd.DataFrame()
+    # for row in test_df[['question1', 'question2']].values:
+    #     dl_1 = fd.word_tag(row[0])
+    #     dl_2 = fd.word_tag(row[1])
+    #     df_1 = pd.DataFrame(dl_1)
+    #     df_2 = pd.DataFrame(dl_2)
+    #     temp = fd.similarity_percentage(df1=df_1, df2=df_2)
+    #     df = df.append(temp)
+    # df.reset_index(drop=True, inplace=True)
     # PARALLEL:
-    # temp = Parallel(n_jobs=7)(delayed(dev_pipeline)(row) for row in test_df[['question1', 'question2']].values)
-    # df = pd.concat(temp)
+    temp = Parallel(n_jobs=7)(delayed(dev_pipeline)(row) for row in test_df[['question1', 'question2']].values)
+    df = pd.concat(temp)
 
     df['test_id'] = test_df['test_id']
     del test_df
@@ -380,5 +380,6 @@ def main():
     t1 = time.time()
     total = t1 - t0
     print "total time: " + str(total)
+    # save df with requested format
     prob_df.to_csv(path_or_buf=fd.tmp_path+'results_test', header=['test_id', 'is_duplicate'],
                                               columns=['test_id', 'is_duplicate'], index=None, sep=',', mode='w')
