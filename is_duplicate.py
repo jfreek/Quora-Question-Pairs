@@ -1,5 +1,6 @@
 # -*- coding: UTF-8 -*-
 import time
+from difflib import SequenceMatcher
 import re
 import pickle
 from sklearn.cluster import KMeans
@@ -80,6 +81,8 @@ def get_percentage(list1, list2):
             break
     percent = float(2*count)/t
     return percent
+    # sm = SequenceMatcher(None, list1, list2)
+    # return sm.ratio()
 
 
 def get_relevance(df, columns):
@@ -105,13 +108,11 @@ def dev_pipeline(row):
     :return: data frame
     """
     fd = FindDuplicates()
-    dl_1 = fd.word_tag(row[1])
-    dl_2 = fd.word_tag(row[2])
+    dl_1 = fd.word_tag(row[0])
+    dl_2 = fd.word_tag(row[1])
     df_1 = pd.DataFrame(dl_1)
     df_2 = pd.DataFrame(dl_2)
     temp = fd.similarity_percentage(df1=df_1, df2=df_2)
-    temp['id'] = row[0]
-    temp['is_duplicate'] = row[3]
     return temp
 
 
@@ -207,6 +208,7 @@ class FindDuplicates:
     def __init__(self):
         self.nlp = spacy.load('en')
         self.tmp_path = '/home/jfreek/workspace/tmp/'
+        self.models_path = '/home/jfreek/workspace/models/'
         self.cluster_path = "/home/jfreek/workspace/w2v_clusters/quora_300_5_2_e-3_sg_kmeans_10_dict.p"
         self.clusters = pickle.load(open(self.cluster_path, "rb"))
 
@@ -271,8 +273,21 @@ class FindDuplicates:
                 df[var] = p
         return df
 
-    def nn_filter(self):
-        pass
+    def log_regression(self, df, x_variables, y_variables, filename='lr_model_test.sav'):
+        """
+        Saves a logistic regression model.
+        :param df: data frame with variables
+        :param x_variables: list of columns to consider: list
+        :param y_variables: column to fit with: str
+        :param filename: name of model
+        :return: saves model as pickle
+        """
+        X = df[x_variables].values
+        y = df[y_variables].values
+        logreg = LogisticRegression()
+        logreg.fit(X, y)
+        # to save model
+        pickle.dump(logreg, open(self.models_path+filename, 'wb'))
 
 
 def main():
@@ -286,71 +301,84 @@ def main():
     fd = FindDuplicates()
     train_df = pd.read_csv(fd.tmp_path+'train.csv')
     train_df.dropna(inplace=True)
-    train_df = train_df[:10000]
+    # train_df = train_df[:10000]
 
-    # dev pipeline Parallel style ======================================
-    # t0 = time.time()
-    # temp = Parallel(n_jobs=7)(delayed(dev_pipeline)(row)
-    #                         for row in train_df[['id', 'question1', 'question2', 'is_duplicate']].values)
-    # t1 = time.time()
-    # total = t1 - t0
-    # print "total time: " + str(total)
-    # df = pd.concat(temp)
-    # df.reset_index(drop=True, inplace=True)
-    # ============================================================
-
-    # dev pipeline Cavernicola style =============================
+    # dev pipeline Parallel style:
     t0 = time.time()
-    df = pd.DataFrame()
-    for row in train_df[['id', 'question1', 'question2', 'is_duplicate']].values:
-        dl_1 = fd.word_tag(row[1])
-        dl_2 = fd.word_tag(row[2])
-        df_1 = pd.DataFrame(dl_1)
-        df_2 = pd.DataFrame(dl_2)
-        temp = fd.similarity_percentage(df1=df_1, df2=df_2)
-        temp['id'] = row[0]
-        temp['is_duplicate'] = row[3]
-        df = df.append(temp)
-    df.reset_index(drop=True, inplace=True)
+    temp = Parallel(n_jobs=7)(delayed(dev_pipeline)(row) for row in train_df[['question1', 'question2']].values)
     t1 = time.time()
     total = t1 - t0
     print "total time: " + str(total)
-    # ============================================================
-    # Logistic Regression
+    df = pd.concat(temp)
+
+    # dev pipeline Cavernicola style:
+    # t0 = time.time()
+    # df = pd.DataFrame()
+    # for row in train_df[['question1', 'question2']].values:
+    #     dl_1 = fd.word_tag(row[0])
+    #     dl_2 = fd.word_tag(row[1])
+    #     df_1 = pd.DataFrame(dl_1)
+    #     df_2 = pd.DataFrame(dl_2)
+    #     temp = fd.similarity_percentage(df1=df_1, df2=df_2)
+    #     df = df.append(temp)
+    # df.reset_index(drop=True, inplace=True)
+    # t1 = time.time()
+    # total = t1 - t0
+    # print "total time: " + str(total)
+
+    # Logistic Regression TEST
+    df['is_duplicate'] = train_df['is_duplicate']
+    df['id'] = train_df['id']
+    del train_df
     X = df[['lemma', 'noun']].values
     y = df['is_duplicate'].values
-    X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=.3, random_state=6)
     logreg = LogisticRegression()
+    X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=.3, random_state=6)
     logreg.fit(X_train, y_train)
     # get average accuracy
     result = logreg.score(X_test, y_test)
-    print result
-    # predict 0 or 1
+    # predict 0 or 1 Conf Matrix
     y_pred = logreg.predict(X_test)
     confusion_m = confusion_matrix(y_test, y_pred)
+    # show results:
+    print result
     print confusion_m
     print(classification_report(y_test, y_pred))
-    # to save model
-    filename = '/home/jfreek/workspace/models/lr_model_test.sav'
-    pickle.dump(logreg, open(filename, 'wb'))
-    # to load
-    lr_model = pickle.load(open(filename, 'rb'))
-    # get probabilities
-    probs = logreg.predict_proba(X_test)
-    prob_df = pd.DataFrame()
-    for prob in probs:
-        temp = pd.DataFrame({'is_duplicate': prob[1]}, index=[0])
-        prob_df = prob_df.append(temp)
-    prob_df.reset_index(drop=True, inplace=True)
-    prob_df['id'] = df['id']
+    # Logistic Regression all data IF TEST LOOKS GOOD:
+    fd.log_regression(df=df, x_variables=['lemma', 'noun'], y_variables='is_duplicate', filename='lr_model.sav')
 
     # ********** Find Duplicates pipeline **********
+    fd = FindDuplicates()
+    filename = 'lr_model_test.sav'
+    test_df = pd.read_csv(fd.tmp_path+'test.csv')
+    test_df.dropna(inplace=True)
+    test_df = test_df[:10000]
+
+    t0 = time.time()
+    # CAVERNICOLA:
     df = pd.DataFrame()
-    for row in train_df[['id', 'question1', 'question2', 'is_duplicate']].values:
-        df_1 = fd.word_tag(row[1])
-        df_2 = fd.word_tag(row[2])
+    for row in test_df[['question1', 'question2']].values:
+        dl_1 = fd.word_tag(row[0])
+        dl_2 = fd.word_tag(row[1])
+        df_1 = pd.DataFrame(dl_1)
+        df_2 = pd.DataFrame(dl_2)
         temp = fd.similarity_percentage(df1=df_1, df2=df_2)
-        # filter part HERE
-        temp['id'] = row[0]
         df = df.append(temp)
     df.reset_index(drop=True, inplace=True)
+    # PARALLEL:
+    # temp = Parallel(n_jobs=7)(delayed(dev_pipeline)(row) for row in test_df[['question1', 'question2']].values)
+    # df = pd.concat(temp)
+
+    df['test_id'] = test_df['test_id']
+    del test_df
+    logreg = pickle.load(open(fd.models_path+filename, 'rb'))
+    # get probabilities
+    X_test = df[['lemma', 'noun']].values
+    probs = logreg.predict_proba(X_test)
+    prob_df = pd.DataFrame(data=probs[0:, 1:], columns=['is_duplicate'])
+    prob_df['test_id'] = df['test_id']
+    t1 = time.time()
+    total = t1 - t0
+    print "total time: " + str(total)
+    prob_df.to_csv(path_or_buf=fd.tmp_path+'results_test', header=['test_id', 'is_duplicate'],
+                                              columns=['test_id', 'is_duplicate'], index=None, sep=',', mode='w')
