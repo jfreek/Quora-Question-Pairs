@@ -100,14 +100,13 @@ def get_relevance(df, columns):
     return d
 
 
-def dev_pipeline(row):
+def dev_pipeline(row, fd):
     """
     Steps for development of model.
     tags words and finds similarities for further check. 
     :param row: data frame row: pandas series
     :return: data frame
     """
-    fd = FindDuplicates()
     dl_1 = fd.word_tag(row[0])
     dl_2 = fd.word_tag(row[1])
     df_1 = pd.DataFrame(dl_1)
@@ -273,6 +272,20 @@ class FindDuplicates:
                 df[var] = p
         return df
 
+    def dev_pipeline(self, row):
+        """
+        Steps for development of model.
+        tags words and finds similarities for further check. 
+        :param row: data frame row: pandas series
+        :return: data frame
+        """
+        dl_1 = self.word_tag(row[0])
+        dl_2 = self.word_tag(row[1])
+        df_1 = pd.DataFrame(dl_1)
+        df_2 = pd.DataFrame(dl_2)
+        temp = self.similarity_percentage(df1=df_1, df2=df_2)
+        return temp
+
     def log_regression(self, df, x_variables, y_variables, filename='lr_model_test.sav'):
         """
         Saves a logistic regression model.
@@ -301,30 +314,25 @@ def main():
     fd = FindDuplicates()
     train_df = pd.read_csv(fd.tmp_path+'train.csv')
     train_df.dropna(inplace=True)
-    # train_df = train_df[:10000]
+    train_df = train_df[:1000]
 
     # dev pipeline Parallel style:
     t0 = time.time()
-    temp = Parallel(n_jobs=7)(delayed(dev_pipeline)(row) for row in train_df[['question1', 'question2']].values)
+    temp = Parallel(n_jobs=7)(delayed(fd.dev_pipeline)(row) for row in train_df[['question1', 'question2']].values)
     t1 = time.time()
     total = t1 - t0
     print "total time: " + str(total)
     df = pd.concat(temp)
+    df.reset_index(drop=True, inplace=True)
 
     # dev pipeline Cavernicola style:
-    # t0 = time.time()
-    # df = pd.DataFrame()
-    # for row in train_df[['question1', 'question2']].values:
-    #     dl_1 = fd.word_tag(row[0])
-    #     dl_2 = fd.word_tag(row[1])
-    #     df_1 = pd.DataFrame(dl_1)
-    #     df_2 = pd.DataFrame(dl_2)
-    #     temp = fd.similarity_percentage(df1=df_1, df2=df_2)
-    #     df = df.append(temp)
-    # df.reset_index(drop=True, inplace=True)
-    # t1 = time.time()
-    # total = t1 - t0
-    # print "total time: " + str(total)
+    t0 = time.time()
+    temp = [fd.dev_pipeline(row) for row in train_df[['question1', 'question2']].values]
+    df = pd.concat(temp)
+    df.reset_index(drop=True, inplace=True)
+    t1 = time.time()
+    total = t1 - t0
+    print "total time: " + str(total)
 
     # Logistic Regression TEST
     df['is_duplicate'] = train_df['is_duplicate']
@@ -344,8 +352,10 @@ def main():
     print result
     print confusion_m
     print(classification_report(y_test, y_pred))
+
     # Logistic Regression all data IF TEST LOOKS GOOD:
     fd.log_regression(df=df, x_variables=['lemma', 'noun'], y_variables='is_duplicate', filename='lr_model.sav')
+
 
     # ********** Find Duplicates pipeline **********
     fd = FindDuplicates()
@@ -356,22 +366,23 @@ def main():
 
     t0 = time.time()
     # CAVERNICOLA:
-    # df = pd.DataFrame()
-    # for row in test_df[['question1', 'question2']].values:
-    #     dl_1 = fd.word_tag(row[0])
-    #     dl_2 = fd.word_tag(row[1])
-    #     df_1 = pd.DataFrame(dl_1)
-    #     df_2 = pd.DataFrame(dl_2)
-    #     temp = fd.similarity_percentage(df1=df_1, df2=df_2)
-    #     df = df.append(temp)
-    # df.reset_index(drop=True, inplace=True)
+    t0 = time.time()
+    temp = [fd.dev_pipeline(row) for row in test_df[['question1', 'question2']].values]
+    df = pd.concat(temp)
+    df.reset_index(drop=True, inplace=True)
+    t1 = time.time()
+    total = t1 - t0
+    print "total time: " + str(total)
+
     # PARALLEL:
     temp = Parallel(n_jobs=7)(delayed(dev_pipeline)(row) for row in test_df[['question1', 'question2']].values)
     df = pd.concat(temp)
+    df.reset_index(drop=True, inplace=True)
 
     df['test_id'] = test_df['test_id']
     del test_df
     logreg = pickle.load(open(fd.models_path+filename, 'rb'))
+
     # get probabilities
     X_test = df[['lemma', 'noun']].values
     probs = logreg.predict_proba(X_test)
@@ -380,6 +391,7 @@ def main():
     t1 = time.time()
     total = t1 - t0
     print "total time: " + str(total)
+
     # save df with requested format
     prob_df.to_csv(path_or_buf=fd.tmp_path+'results_test', header=['test_id', 'is_duplicate'],
                                               columns=['test_id', 'is_duplicate'], index=None, sep=',', mode='w')
