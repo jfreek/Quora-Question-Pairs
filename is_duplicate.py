@@ -349,7 +349,7 @@ def main():
 
     # ********** Find Duplicates pipeline **********
     fd = FindDuplicates()
-    filename = 'lr_model_test.sav'
+    filename = 'lr_model.sav'
     test_df = pd.read_csv(fd.tmp_path+'test.csv')
     # test_df.dropna(inplace=True)
     # test_df = test_df[:10000]
