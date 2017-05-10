@@ -13,6 +13,7 @@ from nltk.corpus import stopwords
 import pandas as pd
 import spacy
 from joblib import Parallel, delayed
+from pathos.multiprocessing import ProcessingPool
 
 
 def replace_text(text, replace_list, replace_by):
@@ -356,7 +357,6 @@ def main():
     # Logistic Regression all data IF TEST LOOKS GOOD:
     fd.log_regression(df=df, x_variables=['lemma', 'noun'], y_variables='is_duplicate', filename='lr_model.sav')
 
-
     # ********** Find Duplicates pipeline **********
     fd = FindDuplicates()
     filename = 'lr_model.sav'
@@ -364,7 +364,6 @@ def main():
     # test_df.dropna(inplace=True)
     # test_df = test_df[:10000]
 
-    t0 = time.time()
     # CAVERNICOLA:
     t0 = time.time()
     temp = [fd.dev_pipeline(row) for row in test_df[['question1', 'question2']].values]
@@ -375,9 +374,13 @@ def main():
     print "total time: " + str(total)
 
     # PARALLEL:
+    t0 = time.time()
     temp = Parallel(n_jobs=7)(delayed(dev_pipeline)(row) for row in test_df[['question1', 'question2']].values)
     df = pd.concat(temp)
     df.reset_index(drop=True, inplace=True)
+    t1 = time.time()
+    total = t1 - t0
+    print "total time: " + str(total)
 
     df['test_id'] = test_df['test_id']
     del test_df
@@ -388,9 +391,6 @@ def main():
     probs = logreg.predict_proba(X_test)
     prob_df = pd.DataFrame(data=probs[0:, 1:], columns=['is_duplicate'])
     prob_df['test_id'] = df['test_id']
-    t1 = time.time()
-    total = t1 - t0
-    print "total time: " + str(total)
 
     # save df with requested format
     prob_df.to_csv(path_or_buf=fd.tmp_path+'results_test', header=['test_id', 'is_duplicate'],
