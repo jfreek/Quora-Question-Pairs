@@ -119,11 +119,12 @@ def dev_pipeline(row):
 
 def main():
     tmp_path = '/home/jfreek/workspace/tmp/'
-    models_path = '/home/jfreek/workspace/models/lr_model_test.sav'
+    models_path = '/home/jfreek/workspace/models/lr_model.sav'
 
     # ********** DEV find duplicates **********
     train_df = read_csv(tmp_path+'train.csv')
     train_df.dropna(inplace=True)
+    train_df.reset_index(inplace=True, drop=True)
     train_df = train_df[:100000]
 
     # dev pipeline PARALLEL:
@@ -159,15 +160,13 @@ def main():
     log_regression(df=df, x_variables=['lemma', 'noun'], y_variables='is_duplicate', path=models_path)
 
     # ********** Find Duplicates pipeline **********
-    filename = 'lr_model.sav'
     test_df = read_csv(tmp_path+'test.csv')
-    # test_df.dropna(inplace=True)
-    # test_df = test_df[:10000]
 
     # PARALLEL:
     t0 = time.time()
     temp = Parallel(n_jobs=7)(delayed(dev_pipeline)(row) for row in test_df[['question1', 'question2']].values)
     df = concat(temp)
+    del temp
     df.reset_index(drop=True, inplace=True)
     t1 = time.time()
     total = t1 - t0
@@ -182,6 +181,7 @@ def main():
     probs = logreg.predict_proba(X_test)
     prob_df = DataFrame(data=probs[0:, 1:], columns=['is_duplicate'])
     prob_df['test_id'] = df['test_id']
+    del df
 
     # save df with requested format
     prob_df.to_csv(path_or_buf=tmp_path+'results_test', header=['test_id', 'is_duplicate'],
