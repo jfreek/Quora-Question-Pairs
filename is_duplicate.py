@@ -10,7 +10,8 @@ import spacy
 from joblib import Parallel, delayed
 
 # Global Variables:
-cluster_path = "/home/jfreek/workspace/w2v_clusters/quora_300_5_2_e-3_sg_kmeans_10_dict.p"
+# cluster_path = "/home/jfreek/workspace/w2v_clusters/quora_300_5_2_e-3_sg_kmeans_10_dict.p"
+cluster_path = "/home/jfreek/workspace/w2v_clusters/wikipedia_glove_300"
 nlp = spacy.load('en')
 clusters = pickle.load(open(cluster_path, "rb"))
 
