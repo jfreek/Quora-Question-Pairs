@@ -5,7 +5,7 @@ from sklearn.cluster import KMeans
 from gensim.models import word2vec
 from nltk.tokenize import word_tokenize
 from nltk.corpus import stopwords
-import pandas as pd
+from pandas import read_csv
 
 
 def replace_text(text, replace_list, replace_by):
@@ -56,6 +56,19 @@ def clean_stop_words(stop_words_list, wordlist):
     return new_wordlist
 
 
+def load_glove_model(glovefile):
+    print "Loading Glove Model"
+    f = open(glovefile, 'r')
+    model = {}
+    for line in f:
+        splitline = line.split()
+        word = splitline[0]
+        embedding = [float(val) for val in splitline[1:]]
+        model[word] = embedding
+    print "Done.", len(model), " words loaded!"
+    return model
+
+
 class Word2vecFunctions:
     """
     All functions to prepare data, train a word2vec model and classify words in clusters.
@@ -73,7 +86,7 @@ class Word2vecFunctions:
         :return: word tokens: list
         """
         # read training data
-        train_df = pd.read_csv(self.tmp_path+'train.csv')
+        train_df = read_csv(self.tmp_path+'train.csv')
         # ********** clean text **********
         question_list = train_df["question1"].tolist() + train_df["question2"].tolist()
         question_list = list(set(question_list))
@@ -142,7 +155,7 @@ class Word2vecFunctions:
 
 
 def main():
-    # **********To train and create word2vec model **********
+    # **********To train and create word2vec model and clusters **********
     wf = Word2vecFunctions()
     tokens = wf.data_prep(checkpoint=True)
     wf.w2v_model(tokens=tokens)
