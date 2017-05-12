@@ -6,6 +6,7 @@ from gensim.models import word2vec
 from nltk.tokenize import word_tokenize
 from nltk.corpus import stopwords
 from pandas import read_csv
+from numpy import array
 
 
 def replace_text(text, replace_list, replace_by):
@@ -57,16 +58,23 @@ def clean_stop_words(stop_words_list, wordlist):
 
 
 def load_glove_model(glovefile):
+    """
+    Loads glove model and saves words and vectors in lists.
+    :param glovefile: path to file: str
+    :return: a list of words and a list of vectors: lists
+    """
     print "Loading Glove Model"
     f = open(glovefile, 'r')
-    model = {}
+    words = []
+    vectors = []
     for line in f:
         splitline = line.split()
         word = splitline[0]
         embedding = [float(val) for val in splitline[1:]]
-        model[word] = embedding
-    print "Done.", len(model), " words loaded!"
-    return model
+        vectors.append(embedding)
+        words.append(word)
+    print "Done.", len(words), " words loaded!"
+    return words, vectors
 
 
 class Word2vecFunctions:
@@ -128,7 +136,7 @@ class Word2vecFunctions:
         model_skg.save(self.model_path + "quora_300_{params}_e-3_sg".format(params=param))
         print "********************MODEL saved********************"
 
-    def kmeans_clustering(self, param, cluster_size=10):
+    def kmeans_clustering(self, cluster_size=10, pretrained=True):
         """
         Creates clusters of words using word2vec vectors and k-means algorithm.
         :param param: parameters used in word2vec model as an identifier in clusters names: str
@@ -136,27 +144,45 @@ class Word2vecFunctions:
         :return: saves clusters data frame as pickle
         """
         # ********** Clusters! **********
-        # Load the model
-        w2v_model = word2vec.Word2Vec.load(self.model_path + "quora_300_{params}_e-3_sg".format(params=param))
-        # set the list of words in the vocab in vector format
-        word_vectors = w2v_model.wv.syn0
+        if pretrained:
+            # file name
+            filename = "wikipedia_glove_300"
+            # get words and vectors
+            words_list, vectors_list = load_glove_model(glovefile='/home/jfreek/workspace/glove.6B/glove.6B.300d.txt')
+            # convert to numpy array
+            vectors_array = array(vectors_list)
+
+        else:
+            # file name
+            filename = "quora_300_5_2_e-3_sg"
+            # Load the model
+            w2v_model = word2vec.Word2Vec.load(self.model_path + filename)
+            # list of vocab
+            words_list = w2v_model.wv.index2word
+            # set the list of words in the vocab in vector format
+            vectors_array = w2v_model.wv.syn0
+
         # number of clusters
-        num_clusters = len(w2v_model.wv.vocab) / cluster_size
+        num_clusters = len(words_list) / cluster_size
         # initalize a k-means object and use it to extract centroids
         kmeans_clustering = KMeans(n_clusters=num_clusters)
         print "********************cluster initialized********************"
         # assignment of cluster for each word
-        idx = kmeans_clustering.fit_predict(word_vectors)
+        idx = kmeans_clustering.fit_predict(vectors_array)
         print "********************cluster assignment********************"
         # create a Word:Index dictionary
-        word_centroid_map = dict(zip(w2v_model.wv.index2word, idx))
+        word_centroid_map = dict(zip(words_list, idx))
         print "********************cluster created********************"
-        pickle.dump(word_centroid_map, open(self.cluster_path + "quora_300_{params}_e-3_sg_kmeans_{k}_dict.p".format(params=param, k=str(cluster_size)), "wb"))
+        pickle.dump(word_centroid_map, open(self.cluster_path + filename, "wb"))
 
 
 def main():
-    # **********To train and create word2vec model and clusters **********
+    # ********** To train and create word2vec model and clusterize **********
     wf = Word2vecFunctions()
     tokens = wf.data_prep(checkpoint=True)
     wf.w2v_model(tokens=tokens)
-    wf.kmeans_clustering(param='5_2', cluster_size=10)
+    wf.kmeans_clustering(cluster_size=10, pretrained=False)
+
+    # ********** To read pretrained model and clusterize **********
+    wf = Word2vecFunctions()
+    wf.kmeans_clustering(cluster_size=10, pretrained=True)
