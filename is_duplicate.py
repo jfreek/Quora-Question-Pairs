@@ -10,10 +10,11 @@ import spacy
 from joblib import Parallel, delayed
 
 # Global Variables:
-# cluster_path = "/home/jfreek/workspace/w2v_clusters/quora_300_5_2_e-3_sg_kmeans_10_dict.p"
-cluster_path = "/home/jfreek/workspace/w2v_clusters/wikipedia_glove_300"
+cluster_path = "/home/jfreek/workspace/w2v_clusters/quora_300_5_2_e-3_sg_kmeans_10_dict.p"
+model_path = "/home/jfreek/workspace/models/wikipedia_glove_300_dict"
 nlp = spacy.load('en')
 clusters = pickle.load(open(cluster_path, "rb"))
+model_dict = pickle.load(open(model_path, "rb"))
 
 
 def get_percentage(list1, list2):
@@ -38,27 +39,27 @@ def get_percentage(list1, list2):
     # return sm.ratio()
 
 
-def word_tag(question):
+def word_tag(question, to_unicode=True):
     """
     Tags words with question id, pos, lemma and w2v cluster
     :param question: question to tag: str
+    :param to_unicode: True if you want text transformed to unicode: bool
     :return: A list of dictionaries with all words and all its tags: list
     """
-    question = question.lower()
+    question = question.title()
     # check text type and converting to unicode
-    if type(question) != unicode:
+    if type(question) != unicode and to_unicode:
         question = question.decode('utf8')
     # tag process
     quest = nlp(question)
-    # df = DataFrame()
     tags_list = []
     for word in quest:
         try:
-            context = clusters[word.text]
+            context = clusters[word.text.lower()]
             context = str(context)
         except:
             context = None
-        temp = {'word': word.text, 'lemma': word.lemma_, 'pos': word.pos_, 'context': context}
+        temp = {'word': word.text, 'lemma': word.lemma_, 'pos': word.pos_, 'ner': word.ent_type_, 'context': context}
         tags_list.append(temp)
     return tags_list
 
@@ -84,6 +85,14 @@ def similarity_percentage(df1, df2):
             p = get_percentage(list1=df_list1, list2=df_list2) if df_list1 and df_list2 else 0
             df[var] = p
     return df
+
+
+def resultant_vector():
+    pass
+
+
+def vector_similarity():
+    pass
 
 
 def log_regression(df, x_variables, y_variables, path):
