@@ -10,11 +10,11 @@ import spacy
 from joblib import Parallel, delayed
 
 # Global Variables:
-cluster_path = "/home/jfreek/workspace/w2v_clusters/quora_300_5_2_e-3_sg_kmeans_10_dict.p"
 model_path = "/home/jfreek/workspace/models/wikipedia_glove_300_dict"
-nlp = spacy.load('en')
-clusters = pickle.load(open(cluster_path, "rb"))
 model_dict = pickle.load(open(model_path, "rb"))
+nlp = spacy.load('en')
+cluster_path = "/home/jfreek/workspace/w2v_clusters/quora_300_5_2_e-3_sg_kmeans_10_dict.p"
+# clusters = pickle.load(open(cluster_path, "rb"))
 
 
 def get_percentage(list1, list2):
@@ -39,27 +39,41 @@ def get_percentage(list1, list2):
     # return sm.ratio()
 
 
-def word_tag(question, to_unicode=True):
+def resultant_vector():
+    pass
+
+
+def vector_similarity():
+    pass
+
+
+def word_tag(question, vectors=True):
     """
     Tags words with question id, pos, lemma and w2v cluster
     :param question: question to tag: str
     :param to_unicode: True if you want text transformed to unicode: bool
     :return: A list of dictionaries with all words and all its tags: list
     """
-    question = question.title()
+    # question = ' '.join([word[0].upper() + word[1:] for word in question.split(' ')])
     # check text type and converting to unicode
-    if type(question) != unicode and to_unicode:
+    if type(question) != unicode:
         question = question.decode('utf8')
     # tag process
     quest = nlp(question)
     tags_list = []
     for word in quest:
         try:
-            context = clusters[word.text.lower()]
-            context = str(context)
+            if vectors:
+                vector = model_dict[word.text.lower()]
+            else:
+                context = clusters[word.text.lower()]
+                context = str(context)
         except:
-            context = None
-        temp = {'word': word.text, 'lemma': word.lemma_, 'pos': word.pos_, 'ner': word.ent_type_, 'context': context}
+            if vectors:
+                vector = None
+            else:
+                context = None
+        temp = {'word': word.text, 'lemma': word.lemma_, 'pos': word.pos_, 'ner': word.ent_type_, 'vector': vector}
         tags_list.append(temp)
     return tags_list
 
@@ -71,28 +85,25 @@ def similarity_percentage(df1, df2):
     :param df2: data frame of question 2 and tags
     :return: data frame with percentages: data frame
     """
-    variables = ['context', 'lemma', 'noun']
+    pos_var = ['NOUN', 'VERB', 'ADJ', 'ADV', 'ADP', 'NUM', 'PROPN', 'PRON']
+    ner_var = ['PERSON', 'NORP', 'FACILITY', 'FAC', 'ORG', 'GPE', 'LOC', 'PRODUCT', 'EVENT', 'WORK_OF_ART', 'LANGUAGE',
+               'DATE', 'TIME', 'PERCENT', 'MONEY', 'QUANTITY', 'ORDINAL', 'CARDINAL']
+    variables = pos_var + ner_var
     df = DataFrame(columns=variables, index=[0])
     for var in variables:
-        if var == 'noun':
-            df_list1 = df1[(df1['pos'] == 'NOUN') & (df1['context'].notnull())]['context'].tolist()
-            df_list2 = df2[(df2['pos'] == 'NOUN') & (df2['context'].notnull())]['context'].tolist()
-            p = get_percentage(list1=df_list1, list2=df_list2) if df_list1 and df_list2 else 0
-            df[var] = p
-        else:
-            df_list1 = df1[df1[var].notnull()][var].tolist()
-            df_list2 = df2[df2[var].notnull()][var].tolist()
-            p = get_percentage(list1=df_list1, list2=df_list2) if df_list1 and df_list2 else 0
-            df[var] = p
+        if var in pos_var:
+            df_list1 = df1[(df1['pos'] == var)]['vector'].tolist()
+
+            # df_list1 = df1[(df1['pos'] == 'NOUN') & (df1['context'].notnull())]['context'].tolist()
+            # df_list2 = df2[(df2['pos'] == 'NOUN') & (df2['context'].notnull())]['context'].tolist()
+            # p = get_percentage(list1=df_list1, list2=df_list2) if df_list1 and df_list2 else 0
+            # df[var] = p
+        # else:
+        #     df_list1 = df1[df1[var].notnull()][var].tolist()
+        #     df_list2 = df2[df2[var].notnull()][var].tolist()
+        #     p = get_percentage(list1=df_list1, list2=df_list2) if df_list1 and df_list2 else 0
+        #     df[var] = p
     return df
-
-
-def resultant_vector():
-    pass
-
-
-def vector_similarity():
-    pass
 
 
 def log_regression(df, x_variables, y_variables, path):
@@ -135,7 +146,7 @@ def main():
     train_df = read_csv(tmp_path+'train.csv')
     train_df.dropna(inplace=True)
     train_df.reset_index(inplace=True, drop=True)
-    train_df = train_df[:100000]
+    train_df = train_df[:100]
 
     # dev pipeline PARALLEL:
     t0 = time.time()
