@@ -1,11 +1,12 @@
 # -*- coding: UTF-8 -*-
 import time
-# from difflib import SequenceMatcher
 import pickle
-from sklearn.linear_model import LogisticRegression
+from sklearn.neural_network import MLPClassifier
 from sklearn.cross_validation import train_test_split
 from sklearn.metrics import confusion_matrix, classification_report
+from sklearn.metrics.pairwise import cosine_similarity
 from pandas import DataFrame, read_csv, concat
+from numpy import sum
 import spacy
 from joblib import Parallel, delayed
 
@@ -14,37 +15,26 @@ model_path = "/home/jfreek/workspace/models/wikipedia_glove_300_dict"
 model_dict = pickle.load(open(model_path, "rb"))
 nlp = spacy.load('en')
 cluster_path = "/home/jfreek/workspace/w2v_clusters/quora_300_5_2_e-3_sg_kmeans_10_dict.p"
-# clusters = pickle.load(open(cluster_path, "rb"))
+clusters = pickle.load(open(cluster_path, "rb"))
 
 
-def get_percentage(list1, list2):
-    """
-    Calculates the similarity of two lists (sequence matcher style)
-    :param list1: list
-    :param list2: list
-    :return: percentage: float
-    """
-    t = len(list1) + len(list2)
-    count = 0
-    for item in list1:
-        if list2:
-            if item in list2:
-                count += 1
-                list2.remove(item)
-        else:
-            break
-    percent = float(2*count)/t
-    return percent
-    # sm = SequenceMatcher(None, list1, list2)
-    # return sm.ratio()
-
-
-def resultant_vector():
-    pass
-
-
-def vector_similarity():
-    pass
+def context_similarity(list1, list2, vectors=True):
+    if vectors:
+        v1 = sum(list1, axis=0)
+        v2 = sum(list2, axis=0)
+        sim = cosine_similarity(v1, v2)[0][0]
+    else:
+        t = len(list1) + len(list2)
+        count = 0
+        for item in list1:
+            if list2:
+                if item in list2:
+                    count += 1
+                    list2.remove(item)
+            else:
+                break
+        sim = float(2*count)/t
+    return sim
 
 
 def word_tag(question, vectors=True):
@@ -64,21 +54,21 @@ def word_tag(question, vectors=True):
     for word in quest:
         try:
             if vectors:
-                vector = model_dict[word.text.lower()]
+                context = model_dict[word.text.lower()]
             else:
                 context = clusters[word.text.lower()]
                 context = str(context)
         except:
             if vectors:
-                vector = None
+                context = [0]*300
             else:
                 context = None
-        temp = {'word': word.text, 'lemma': word.lemma_, 'pos': word.pos_, 'ner': word.ent_type_, 'vector': vector}
+        temp = {'word': word.text, 'pos': word.pos_, 'ner': word.ent_type_, 'context': context}
         tags_list.append(temp)
     return tags_list
 
 
-def similarity_percentage(df1, df2):
+def similarity_percentage(df1, df2, vectors=True):
     """
     Calculates similarity of two questions by comparing the tags.
     :param df1: data frame of question 1 and tags
@@ -90,37 +80,28 @@ def similarity_percentage(df1, df2):
                'DATE', 'TIME', 'PERCENT', 'MONEY', 'QUANTITY', 'ORDINAL', 'CARDINAL']
     variables = pos_var + ner_var
     df = DataFrame(columns=variables, index=[0])
+    # set indices to take values after the first verb
+    verbs1 = df1[df1.pos == 'VERB']
+    verbs2 = df2[df2.pos == 'VERB']
+    i = verbs1.index[0] if not verbs1.empty else None
+    j = verbs2.index[0] if not verbs2.empty else None
+    # get context (vectors or clusters) & similarities
     for var in variables:
         if var in pos_var:
-            df_list1 = df1[(df1['pos'] == var)]['vector'].tolist()
-
-            # df_list1 = df1[(df1['pos'] == 'NOUN') & (df1['context'].notnull())]['context'].tolist()
-            # df_list2 = df2[(df2['pos'] == 'NOUN') & (df2['context'].notnull())]['context'].tolist()
-            # p = get_percentage(list1=df_list1, list2=df_list2) if df_list1 and df_list2 else 0
-            # df[var] = p
-        # else:
-        #     df_list1 = df1[df1[var].notnull()][var].tolist()
-        #     df_list2 = df2[df2[var].notnull()][var].tolist()
-        #     p = get_percentage(list1=df_list1, list2=df_list2) if df_list1 and df_list2 else 0
-        #     df[var] = p
+            context_list1 = df1[i+1:][(df1['pos'] == var)]['context'].tolist() if i else df1[(df1['pos'] == var)]['context'].tolist()
+            context_list2 = df2[j+1:][(df2['pos'] == var)]['context'].tolist() if j else df2[(df2['pos'] == var)]['context'].tolist()
+        else:
+            context_list1 = df1[(df1['ner'] == var)]['context'].tolist()
+            context_list2 = df2[(df2['ner'] == var)]['context'].tolist()
+        # get the vector similarity
+        if context_list1 and context_list2:
+            p = context_similarity(list1=context_list1, list2=context_list2, vectors=vectors)
+        elif not context_list1 and not context_list2:
+            p = 1
+        else:
+            p = 0.0
+        df[var] = p
     return df
-
-
-def log_regression(df, x_variables, y_variables, path):
-    """
-    Saves a logistic regression model.
-    :param df: data frame with variables
-    :param x_variables: list of columns to consider: list
-    :param y_variables: column to fit with: str
-    :param filename: name of model
-    :return: saves model as pickle
-    """
-    X = df[x_variables].values
-    y = df[y_variables].values
-    logreg = LogisticRegression()
-    logreg.fit(X, y)
-    # to save model
-    pickle.dump(logreg, open(path, 'wb'))
 
 
 def dev_pipeline(row):
@@ -130,25 +111,26 @@ def dev_pipeline(row):
     :param row: data frame row: pandas series
     :return: data frame
     """
-    dl_1 = word_tag(row[0])
-    dl_2 = word_tag(row[1])
+    vectors = True
+    dl_1 = word_tag(question=row[0], vectors=vectors)
+    dl_2 = word_tag(question=row[1], vectors=vectors)
     df_1 = DataFrame(dl_1)
     df_2 = DataFrame(dl_2)
-    temp = similarity_percentage(df1=df_1, df2=df_2)
+    temp = similarity_percentage(df1=df_1, df2=df_2, vectors=vectors)
     return temp
 
 
 def main():
     tmp_path = '/home/jfreek/workspace/tmp/'
-    models_path = '/home/jfreek/workspace/models/lr_model.sav'
+    models_path = '/home/jfreek/workspace/models/mlp_model'
 
-    # ********** DEV find duplicates **********
+    # ********** TRAIN find duplicates **********
     train_df = read_csv(tmp_path+'train.csv')
     train_df.dropna(inplace=True)
     train_df.reset_index(inplace=True, drop=True)
-    train_df = train_df[:100]
+    train_df = train_df[:4000]
 
-    # dev pipeline PARALLEL:
+    # Foreplay Pipeline PARALLEL:
     t0 = time.time()
     temp = Parallel(n_jobs=7)(delayed(dev_pipeline)(row) for row in train_df[['question1', 'question2']].values)
     t1 = time.time()
@@ -157,49 +139,60 @@ def main():
     df = concat(temp)
     del temp
     df.reset_index(drop=True, inplace=True)
-
-    # Logistic Regression TEST
     df['is_duplicate'] = train_df['is_duplicate']
     df['id'] = train_df['id']
     del train_df
-    X = df[['lemma', 'noun']].values
+
+    # Initialize Classifier & Input values
+    clf = MLPClassifier(solver='sgd', activation='logistic', alpha=1e-5, hidden_layer_sizes=(26,), random_state=1)
+    X = df[['NOUN', 'VERB', 'ADJ', 'ADV', 'ADP', 'NUM', 'PROPN', 'PRON', 'PERSON', 'NORP', 'FACILITY', 'FAC', 
+            'ORG', 'GPE', 'LOC', 'PRODUCT', 'EVENT', 'WORK_OF_ART', 'LANGUAGE', 'DATE', 'TIME', 'PERCENT', 'MONEY', 
+            'QUANTITY', 'ORDINAL', 'CARDINAL']].values
     y = df['is_duplicate'].values
-    logreg = LogisticRegression()
-    X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=.3, random_state=6)
-    logreg.fit(X_train, y_train)
+
+    del df
+
+    # Check MLPClassifier
+    x_train, x_test, y_train, y_test = train_test_split(X, y, test_size=.3, random_state=6)
+    clf.fit(x_train, y_train)
     # get average accuracy
-    result = logreg.score(X_test, y_test)
+    result = clf.score(x_test, y_test)
     # predict 0 or 1 Conf Matrix
-    y_pred = logreg.predict(X_test)
+    y_pred = clf.predict(x_test)
     confusion_m = confusion_matrix(y_test, y_pred)
     # show results:
     print result
     print confusion_m
-    print(classification_report(y_test, y_pred))
+    print(classification_report(y_test, y_pred))    
 
-    # Logistic Regression all data IF TEST LOOKS GOOD:
-    log_regression(df=df, x_variables=['lemma', 'noun'], y_variables='is_duplicate', path=models_path)
+    # Train MLPClassifier Full Data:
+    clf.fit(X, y)
+    
+    # save classifier
+    pickle.dump(clf, open(models_path, 'wb'))
 
-    # ********** Find Duplicates pipeline **********
+    # ********** TEST Find Duplicates **********
+    # Load Testing Data & Classifier
     test_df = read_csv(tmp_path+'test.csv')
+    clf = pickle.load(open(models_path, 'rb'))
 
-    # PARALLEL:
+    # Foreplay Pipeline PARALLEL:
     t0 = time.time()
     temp = Parallel(n_jobs=7)(delayed(dev_pipeline)(row) for row in test_df[['question1', 'question2']].values)
-    df = concat(temp)
-    del temp
-    df.reset_index(drop=True, inplace=True)
     t1 = time.time()
     total = t1 - t0
     print "total time: " + str(total)
-
+    df = concat(temp)
+    del temp
+    df.reset_index(drop=True, inplace=True)
     df['test_id'] = test_df['test_id']
     del test_df
-    logreg = pickle.load(open(models_path, 'rb'))
 
     # get probabilities
-    X_test = df[['lemma', 'noun']].values
-    probs = logreg.predict_proba(X_test)
+    X_test = df[['NOUN', 'VERB', 'ADJ', 'ADV', 'ADP', 'NUM', 'PROPN', 'PRON', 'PERSON', 'NORP', 'FACILITY', 'FAC', 
+        'ORG', 'GPE', 'LOC', 'PRODUCT', 'EVENT', 'WORK_OF_ART', 'LANGUAGE', 'DATE', 'TIME', 'PERCENT', 'MONEY', 
+        'QUANTITY', 'ORDINAL', 'CARDINAL']].values
+    probs = clf.predict_proba(X_test)
     prob_df = DataFrame(data=probs[0:, 1:], columns=['is_duplicate'])
     prob_df['test_id'] = df['test_id']
     del df
@@ -207,3 +200,6 @@ def main():
     # save df with requested format
     prob_df.to_csv(path_or_buf=tmp_path+'results_test', header=['test_id', 'is_duplicate'],
                                               columns=['test_id', 'is_duplicate'], index=None, sep=',', mode='w')
+
+if __name__ == '__main__':
+    main()
